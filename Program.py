@@ -1,76 +1,73 @@
-import pandas as pd
-import numpy as np
 import streamlit as st
-import seaborn as sns
-import matplotlib.pyplot as plt
-
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder, StandardScaler
+import numpy as np
+import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.model_selection import train_test_split
 
-# Streamlit Page Setup
-st.set_page_config(page_title="Disease Prediction App", layout="wide")
-st.title("Disease Prediction using Random Forest")
-st.markdown("Upload your dataset and get evaluation metrics instantly.")
+# Page config
+st.set_page_config(page_title="Disease Predictor", layout="centered")
+st.title("Disease Prediction from Symptoms")
 
-# Step 1: File Upload
-uploaded_file = st.file_uploader("Upload CSV Dataset", type=["csv"])
+# Expanded dataset (mock data)
+data = {
+    'age': [25, 45, 30, 60, 22, 36, 52, 47, 33, 40, 29, 50, 39, 28],
+    'temperature': [98.6, 101.4, 99.2, 102.1, 98.7, 100.5, 101.0, 99.8, 100.1, 103.2, 97.9, 101.6, 102.3, 98.4],
+    'cough':       [1, 1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0],
+    'fatigue':     [0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 0],
+    'headache':    [0, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1, 1, 1, 0],
+    'sore_throat': [0, 1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 0, 1, 0],
+    'body_pain':   [0, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1, 1, 1, 0],
+    'disease': [
+        'None', 'Flu', 'None', 'COVID-19', 'None', 'Flu', 'COVID-19', 'None',
+        'Dengue', 'Malaria', 'None', 'Typhoid', 'Dengue', 'None'
+    ]
+}
+df = pd.DataFrame(data)
 
-if uploaded_file is not None:
-    # Step 2: Load Dataset
-    df = pd.read_csv(uploaded_file)
-    st.write("### Dataset Preview", df.head())
-    st.write("Dataset Shape:", df.shape)
+# Encode target
+le = LabelEncoder()
+df['disease_encoded'] = le.fit_transform(df['disease'])
 
-    # Step 3: Handle Missing Values
-    df.ffill(inplace=True)
+# Features & target
+X = df.drop(['disease', 'disease_encoded'], axis=1)
+y = df['disease_encoded']
 
-    # Step 4: Encode Categorical Features
-    label_encoders = {}
-    for col in df.select_dtypes(include=['object']).columns:
-        if col != 'disease':
-            le = LabelEncoder()
-            df[col] = le.fit_transform(df[col])
-            label_encoders[col] = le
+# Scale features
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
 
-    # Step 5: Encode Target
-    y = df['disease']
-    if y.dtype == 'object':
-        le_target = LabelEncoder()
-        y = le_target.fit_transform(y)
+# Train/test split
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
 
-    # Step 6: Feature Selection & Scaling
-    X = df.drop('disease', axis=1)
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
+# Model training
+model = RandomForestClassifier(n_estimators=100, random_state=42)
+model.fit(X_train, y_train)
 
-    # Step 7: Train-Test Split
-    X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
+# --- User Input ---
+st.subheader("Enter Your Symptoms")
 
-    # Step 8: Train Random Forest Model
-    model = RandomForestClassifier(n_estimators=100, random_state=42)
-    model.fit(X_train, y_train)
+age = st.slider("Age", 1, 100, 30)
+temperature = st.slider("Temperature (°F)", 95.0, 105.0, 98.6)
+cough = st.selectbox("Cough", ["No", "Yes"])
+fatigue = st.selectbox("Fatigue", ["No", "Yes"])
+headache = st.selectbox("Headache", ["No", "Yes"])
+sore_throat = st.selectbox("Sore Throat", ["No", "Yes"])
+body_pain = st.selectbox("Body Pain", ["No", "Yes"])
 
-    # Step 9: Model Evaluation
-    y_pred = model.predict(X_test)
-    acc = accuracy_score(y_test, y_pred)
-    class_report = classification_report(y_test, y_pred, zero_division=0)
-    conf_matrix = confusion_matrix(y_test, y_pred)
+# Convert to numeric
+cough_val = 1 if cough == "Yes" else 0
+fatigue_val = 1 if fatigue == "Yes" else 0
+headache_val = 1 if headache == "Yes" else 0
+sore_throat_val = 1 if sore_throat == "Yes" else 0
+body_pain_val = 1 if body_pain == "Yes" else 0
 
-    st.subheader("Model Performance")
-    st.write(f"**Accuracy:** {acc:.2f}")
-    st.text("Classification Report:\n" + class_report)
+# Predict on button click
+if st.button("Predict"):
+    input_data = np.array([[age, temperature, cough_val, fatigue_val, headache_val, sore_throat_val, body_pain_val]])
+    input_scaled = scaler.transform(input_data)
+    prediction = model.predict(input_scaled)
+    predicted_disease = le.inverse_transform(prediction)[0]
 
-    # Step 10: Confusion Matrix Plot
-    st.subheader("Confusion Matrix")
-    fig, ax = plt.subplots(figsize=(6, 4))
-    sns.heatmap(conf_matrix, annot=True, fmt='d', cmap='Blues', ax=ax)
-    ax.set_xlabel("Predicted")
-    ax.set_ylabel("Actual")
-    st.pyplot(fig)
-
-    st.success("Model training and evaluation complete.")
-
-else:
-    st.info("Please upload a CSV file to get started.")
+    st.subheader("Predicted Disease")
+    st.success(f"The model predicts you may have: **{predicted_disease}**")
